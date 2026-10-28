@@ -23,7 +23,7 @@ class Controlador extends Controller
         $rules = [
             'name' => 'required|string|max:255',
             'email' => 'required|email',
-            'password' => 'required|min:8|max:100',
+            'password' => 'required|min:4|max:100',
             'rol' => 'required'
         ];
         $messages = [
@@ -55,17 +55,31 @@ class Controlador extends Controller
     }
 
     public function getUsuario($id_u) {
-        $usuario = DB::table('users')->where('id', $id_u)->first();
-        return response()->json($usuario);
+    $usuario = User::select('id', 'name', 'email')->find($id_u);
+
+    if (!$usuario) {
+        return response()->json(['message' => 'Usuario no encontrado'], 404);
     }
 
-    public function getPartidas($id_u) {
-        $partidas = DB::table('partidas')->where('jugador_id', $id_u)->get();
+    return response()->json($usuario);
+}
+
+    public function getPartidas(Request $request, $id_u) {
+        $jugador = Jugador::where('user_id', $id_u)->first();
+
+        if (!$jugador) {
+            return response()->json(['message' => 'El usuario no es un jugador'], 404);
+        }
+
+        if ($request->user()->id != $id_u) {
+            return response()->json(['message' => 'No autorizado'], 403);
+        }
+
+        $partidas = Partida::where('jugador_id', $jugador->id)->get();
+
         return response()->json($partidas);
     }
 
-
-    // ACABAR
     public function getRanking() {
         $jugadores = Jugador::with('user')->where('jugadas', '>', 0)->get();
 
@@ -73,25 +87,40 @@ class Controlador extends Controller
             $jugador->winrate = round($jugador->ganadas / $jugador->jugadas * 100, 2);
         }
 
-        $ranking = $jugadores->sortByDesc('winrate')->values();
-
-        return response()->json($ranking);
+        return response()->json($jugadores->sortByDesc('winrate')->values());
     }
 
-    public function getTiradasPartida($id_p) {
-        $tiradasUsuario = DB::table('tiradas')->where('partida_id', $id_p)->get('tirada_jugador');
-        $tiradasMaquina = DB::table('tiradas')->where('partida_id', $id_p)->get('tirada_maquina');
+    public function getTiradasPartida(Request $request, $id_p) {
+        $partida = Partida::find($id_p);
+
+        if (!$partida) {
+            return response()->json(['message' => 'Partida no encontrada'], 404);
+        }
+
+        $jugador = Jugador::where('user_id', $request->user()->id)->first();
+
+        if (!$jugador || $partida->jugador_id != $jugador->id) {
+            return response()->json(['message' => 'No autorizado'], 403);
+        }
+
+        $tiradas = DB::table('tiradas')->where('partida_id', $id_p)->get();
 
         return response()->json([
-            'tiradasUsuario' => $tiradasUsuario,
-            'tiradasMaquina' => $tiradasMaquina
+            'tiradasUsuario' => $tiradas->pluck('tirada_jugador'),
+            'tiradasMaquina' => $tiradas->pluck('tirada_maquina'),
         ]);
     }
 
-    public function deleteUsuario($id_u) {
-        User::where('id', $id_u)->delete();
+    public function deleteUsuario(Request $request, $id_u) {
+        $usuario = User::find($id_u);
 
-        return response()->json("El usuario ha sido eliminado");
+        if (!$usuario) {
+            return response()->json(['message' => 'Usuario no encontrado'], 404);
+        }
+
+        $usuario->delete();
+
+        return response()->json(['message' => 'El usuario ha sido eliminado']);
     }
 
 
@@ -122,6 +151,14 @@ class Controlador extends Controller
 
         if (!$jugador) {
             return response()->json(['message' => 'El usuario no es un jugador'], 403);
+        }
+
+        $partidaActiva = Partida::where('jugador_id', $jugador->id)
+            ->where('activa', true)
+            ->first();
+
+        if ($partidaActiva) {
+            return response()->json(['message' => 'Ya tienes una partida activa.'], 409);
         }
 
         $partida = Partida::create([
