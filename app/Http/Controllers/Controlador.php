@@ -79,10 +79,13 @@ class Controlador extends Controller
     }
 
     public function getTiradasPartida($id_p) {
-        $tiradasUsuario = DB::table('tiradas')->where('id', $id_p)->get('tiradas_usuario');
-        $tiradasMaquina = DB::table('tiradas')->where('id', $id_p)->get('tiradas_maquina');
+        $tiradasUsuario = DB::table('tiradas')->where('partida_id', $id_p)->get('tirada_jugador');
+        $tiradasMaquina = DB::table('tiradas')->where('partida_id', $id_p)->get('tirada_maquina');
 
-        return response()->json($tiradasUsuario, $tiradasMaquina);
+        return response()->json([
+            'tiradasUsuario' => $tiradasUsuario,
+            'tiradasMaquina' => $tiradasMaquina
+        ]);
     }
 
     public function deleteUsuario($id_u) {

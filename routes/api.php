@@ -20,7 +20,7 @@ Route::prefix('user')->middleware(['auth:sanctum', 'user'])->group(function () {
     Route::post('/', [Controlador::class, 'jugar']);
     Route::post('/partida', [Controlador::class, 'crearPartida']);
     Route::get('/partidas/{id}', [Controlador::class, 'getPartidas']);
-    Route::post('/tirada/{id}', [Controlador::class, 'getTiradasPartidaUsuario']);
+    Route::get('/tirada/{id_p}', [Controlador::class, 'getTiradasPartida']);
     Route::get('/ranking', [Controlador::class, 'getRanking']);
 });
 

@@ -26,18 +26,18 @@ class UserFactory extends Factory
     public function definition(): array
     {
 
-        $users = User::all();
-        if ($users->count() == 0) {
-            $rol = 'admin';
-        } else {
-            $rol = 'user';
-        }
+        // $users = User::all();
+        // if ($users->count() == 0) {
+        //     $rol = 'admin';
+        // } else {
+        //     $rol = 'user';
+        // }
 
         return [
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
-            'rol' => $rol,
+            'rol' => 'user',
             'password' => static::$password ??= Hash::make('1234'),
             'remember_token' => Str::random(10),
         ];
