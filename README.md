@@ -1,58 +1,272 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Documentación API – CRUD Piedra, Papel o Tijera
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Autor: Francisco José Sobrino Palomo · DAW · CIFP Virgen de Gracia
 
-## About Laravel
+## 1. Descripción general
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+API REST desarrollada con **Laravel** que combina un **CRUD de usuarios** con el juego **piedra, papel o tijera**. Toda la lógica del juego se ejecuta en el servidor: el cliente solo envía los datos mínimos para pedir la operación.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+**Reglas del juego**
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- Cada partida se juega **al mejor de 5**.
+- Si hay **empate**, la jugada se repite (no cuenta para el marcador).
+- Cuando el mejor de 5 queda decidido, la partida se marca como **finalizada** en la base de datos y se fija el resultado final.
+- La tirada de la máquina la genera el servidor.
 
-## Learning Laravel
+## 2. Datos generales
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+| Concepto | Valor |
+|---|---|
+| URL base (local) | `http://127.0.0.1:8000/api` |
+| Formato | JSON |
+| Autenticación | Laravel Sanctum (Bearer token) |
+| Cabecera recomendada | `Accept: application/json` |
+| Controladores | `AuthController` (login) y `Controlador` (CRUD + juego) |
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+> Todas las rutas llevan el prefijo `/api` (fichero `routes/api.php`).
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+## 3. Autenticación y roles
 
-## Agentic Development
+Se hace login en `POST /api/login`, que devuelve un token. Ese token se envía en las rutas protegidas con la cabecera:
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```
+Authorization: Bearer <token>
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Los roles se guardan en el campo `rol` de la tabla `users` y los controla un middleware (no se valida el rol dentro del controlador):
 
-## Contributing
+| Grupo | Prefijo | Middleware | Quién accede |
+|---|---|---|---|
+| Públicas | — | — | Cualquiera |
+| Administrador | `/admin` | `auth:sanctum`, `admin` | Usuarios con rol admin |
+| Usuario | `/user` | `auth:sanctum`, `user` | Usuarios con rol user |
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## 4. Resumen de endpoints
 
-## Code of Conduct
+| Método | Ruta | Método del controlador | Acceso | Descripción |
+|---|---|---|---|---|
+| POST | `/login` | `AuthController@login` | Público | Iniciar sesión y obtener token |
+| POST | `/recuperar-password` | `recuperarPassword` | Público | Recuperar contraseña por email |
+| POST | `/admin` | `addUsuario` | Admin | Crear un usuario |
+| GET | `/admin/{id}` | `getUsuario` | Admin | Consultar un usuario |
+| DELETE | `/admin/{id}` | `deleteUsuario` | Admin | Eliminar un usuario |
+| DELETE | `/admin/partidas/{id}` | `deletePartidaUsuario` | Admin | Eliminar una partida de un usuario |
+| POST | `/user` | `jugar` | Usuario | Realizar una tirada |
+| POST | `/user/partida` | `crearPartida` | Usuario | Crear una partida nueva |
+| GET | `/user/partidas/{id}` | `getPartidas` | Usuario | Listar las partidas de un jugador |
+| GET | `/user/tirada/{id_p}` | `getTiradasPartida` | Usuario | Listar las tiradas de una partida |
+| GET | `/user/ranking` | `getRanking` | Usuario | Ranking de jugadores |
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## 5. Endpoints públicos
 
-## Security Vulnerabilities
+### 5.1 Login
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+`POST /api/login`
 
-## License
+Autentica a un usuario (admin o user) y devuelve un token de Sanctum.
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+**Body (JSON)**
+
+```json
+{
+  "email": "usuario@example.com",
+  "password": "1234"
+}
+```
+
+| Campo | Tipo | Obligatorio | Descripción |
+|---|---|---|---|
+| email | string | Sí | Email del usuario |
+| password | string | Sí | Contraseña |
+
+**Respuestas**
+
+- `200 OK`: login correcto, devuelve el token.
+- `401 Unauthorized` / `422 Unprocessable Entity`: credenciales incorrectas o datos no válidos.
+
+### 5.2 Recuperar contraseña
+
+`POST /api/recuperar-password`
+
+Inicia la recuperación de contraseña del usuario con ese email.
+
+**Body (JSON)**
+
+```json
+{
+  "email": "usuario@example.com"
+}
+```
+
+| Campo | Tipo | Obligatorio | Descripción |
+|---|---|---|---|
+| email | string | Sí | Email de la cuenta |
+
+**Respuestas**
+
+- `200 OK`: solicitud procesada.
+- `404 Not Found` / `422 Unprocessable Entity`: email no registrado o no válido.
+
+## 6. Endpoints de administrador
+
+Requieren `Authorization: Bearer <token_admin>`. Si el token no es válido se devuelve `401`; si el usuario no es admin, `403`.
+
+### 6.1 Crear usuario
+
+`POST /api/admin`
+
+**Body (JSON)**
+
+```json
+{
+  "name": "admin",
+  "email": "admin@example.com",
+  "password": "1234",
+  "rol": "admin"
+}
+```
+
+| Campo | Tipo | Obligatorio | Descripción |
+|---|---|---|---|
+| name | string | Sí | Nombre del usuario |
+| email | string | Sí | Email (único) |
+| password | string | Sí | Contraseña |
+| rol | string | Sí | `admin` o `user` |
+
+**Respuestas**: `201 Created` (usuario creado), `422` (datos no válidos o email duplicado).
+
+### 6.2 Obtener usuario
+
+`GET /api/admin/{id}`
+
+| Parámetro | Tipo | Descripción |
+|---|---|---|
+| id | integer (URL) | Identificador del usuario |
+
+**Respuestas**: `200 OK` (datos del usuario), `404` (no existe).
+
+### 6.3 Eliminar usuario
+
+`DELETE /api/admin/{id}`
+
+| Parámetro | Tipo | Descripción |
+|---|---|---|
+| id | integer (URL) | Identificador del usuario a eliminar |
+
+Al eliminar un usuario se borran en cascada su registro de jugador, sus partidas y sus tiradas (claves foráneas con `onDelete cascade`).
+
+**Respuestas**: `200 OK`, `404` (no existe).
+
+### 6.4 Eliminar partida de un usuario
+
+`DELETE /api/admin/partidas/{id}`
+
+| Parámetro | Tipo | Descripción |
+|---|---|---|
+| id | integer (URL) | Identificador del usuario dueño de la partida |
+
+**Body (JSON)**
+
+```json
+{
+  "idPartida": 1
+}
+```
+
+Comprobaciones del servidor: el usuario existe (en la tabla `jugadores`), la partida existe, la partida pertenece al usuario indicado en la URL y quien hace la petición es administrador.
+
+**Respuestas**: `200 OK`, `404` (usuario o partida inexistente), `403` (la partida no pertenece al usuario o no eres admin).
+
+## 7. Endpoints de usuario
+
+Requieren `Authorization: Bearer <token_user>`.
+
+### 7.1 Crear partida
+
+`POST /api/user/partida`
+
+Crea una partida nueva para el jugador autenticado. No necesita body.
+
+**Respuestas**: `201 Created` (devuelve la partida creada, con su id), `401`.
+
+### 7.2 Jugar (realizar una tirada)
+
+`POST /api/user`
+
+**Body (JSON)**
+
+```json
+{
+  "idPartida": 1,
+  "tirada": "piedra"
+}
+```
+
+| Campo | Tipo | Obligatorio | Descripción |
+|---|---|---|---|
+| idPartida | integer | Sí | Partida en la que se juega |
+| tirada | string | Sí | `piedra`, `papel` o `tijera` |
+
+**Proceso en el servidor**
+
+1. Comprueba que la partida existe, es del usuario autenticado y está activa.
+2. Valida que la tirada sea `piedra`, `papel` o `tijera`.
+3. Genera la tirada de la máquina.
+4. Determina el resultado (empate, gana jugador o gana máquina).
+5. Actualiza el marcador y guarda la tirada.
+6. Si el mejor de 5 queda decidido, marca la partida como finalizada y fija el resultado final.
+
+**Respuestas**: `200 OK` (tirada de ambos, resultado y marcador), `404` (partida inexistente), `403` (la partida no es tuya), `409`/`422` (partida ya finalizada o tirada no válida).
+
+### 7.3 Listar partidas
+
+`GET /api/user/partidas/{id}`
+
+| Parámetro | Tipo | Descripción |
+|---|---|---|
+| id | integer (URL) | Identificador del jugador del que se consultan las partidas |
+
+**Respuestas**: `200 OK` (lista de partidas con su estado y resultado), `404`.
+
+### 7.4 Listar tiradas de una partida
+
+`GET /api/user/tirada/{id_p}`
+
+| Parámetro | Tipo | Descripción |
+|---|---|---|
+| id_p | integer (URL) | Identificador de la partida |
+
+**Respuestas**: `200 OK` (tiradas de la partida: tirada del jugador, tirada de la máquina y resultado), `404`.
+
+### 7.5 Ranking
+
+`GET /api/user/ranking`
+
+Devuelve los mejores jugadores **sin incluir administradores**, ordenados por *winratio* (ganadas / jugadas), con su posición y sus resultados.
+
+**Respuestas**: `200 OK`, `401`.
+
+## 8. Modelo de datos
+
+**users**: id, name, email, password, rol, timestamps.
+
+**jugadores**: id, user_id (FK → users, cascade), jugadas (integer, por defecto 0), ganadas (integer, por defecto 0), timestamps.
+
+**partidas**: id, jugador_id (FK → jugadores, cascade), resultado (integer: 1 = gana el jugador, 2 = gana la máquina), activa (boolean: true = en curso, false = finalizada), timestamps.
+
+**tiradas**: id, partida_id (FK → partidas, cascade), tirada_jugador (string), tirada_maquina (string), resultado (integer: 0 = empate, 1 = jugador, 2 = máquina), timestamps.
+
+## 9. Códigos de estado habituales
+
+| Código | Significado |
+|---|---|
+| 200 | Petición correcta |
+| 201 | Recurso creado |
+| 401 | Sin token o token no válido |
+| 403 | Rol no autorizado o recurso de otro usuario |
+| 404 | Recurso no encontrado |
+| 422 | Datos de entrada no válidos |
+
+## 10. Colección de Postman
+
+La colección **CRUD PiedraPapelTijera** incluye una petición por cada endpoint (`login admin`, `login usuario`, `addUsuario`, `getUsuario`, `deleteUsuario`, `crearPartida`, `jugar`, `getRanking`, `getPartidas`, `getTiradasPartida`, `deletePartidaUsuario`, `recuperarPassword`). Para probarla: ejecutar `php artisan serve`, hacer login con el usuario correspondiente y pegar el token en la pestaña *Authorization → Bearer Token* de cada petición.
